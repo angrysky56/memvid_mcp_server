@@ -1,0 +1,231 @@
+{
+  "metadata": [
+    {
+      "id": 0,
+      "text": "# Complete MCP Development Knowledge Base\n\n## MCP Development Guidelines and Best Practices\n\n### Core Development Rules\n1. Package Management: ONLY use uv, NEVER pip\n2. Code Quality: Type hints required, docstrings for public APIs, 88 char line length\n3. Testing: Use pytest with anyio, comprehensive error testing\n4. Logging: Always to stderr for MCP servers\n5. Process Management: Signal handlers, atexit registration, resource tracking\n\n### Critical Process Management Patterns\n```python\nimport atexit, signal, sys\n\ndef cleanup_processes():\n    for task in background_tasks:\n        if not task.done(): task.cancel()\n    for job_id, process in running_processes.items():\n        if process and process.poll() is None:\n            process.terminate()\n            try: process.wait(timeout=5)\n            except subprocess.TimeoutExpired: process.kill()\n\nsignal.signal(signal.SIGTERM, signal_handler)\nsignal.signal(signal.SIGINT, signal_handler)\natexit.",
+      "frame": 0,
+      "length": 954
+    },
+    {
+      "id": 1,
+      "text": ".SIGINT, signal_handler)\natexit.register(cleanup_processes)\n```\n\n## FastMCP and MCP Python SDK Complete Guide\n\n### Server Creation\n```python\nfrom mcp.server.fastmcp import FastMCP, Context\nmcp = FastMCP(\"My App\")\n\n@asynccontextmanager\nasync def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:\n    db = await Database.connect()\n    try: yield AppContext(db=db)\n    finally: await db.disconnect()\n\nmcp = FastMCP(\"My App\", lifespan=app_lifespan)\n```\n\n### Tools (Model-controlled actions)\n```python\n@mcp.tool()\nasync def fetch_weather(city: str) -> str:\n    async with httpx.AsyncClient() as client:\n        response = await client.get(f\"https://api.weather.com/{city}\")\n        return response.text\n```\n\n### Resources (Application-controlled data)\n```python\n@mcp.resource(\"users://{user_id}/profile\")\ndef get_user_profile(user_id: str) -> str:\n    return f\"Profile data for user {user_id}\"\n```\n\n### Prompts (User-controlled templates)\n```python\n@mcp.",
+      "frame": 1,
+      "length": 959
+    },
+    {
+      "id": 2,
+      "text": "olled templates)\n```python\n@mcp.prompt()\ndef review_code(code: str) -> str:\n    return f\"Please review this code:\\n\\n{code}\"\n```\n\n### Context Usage\n```python\n@mcp.tool()\nasync def long_task(files: list[str], ctx: Context) -> str:\n    for i, file in enumerate(files):\n        ctx.info(f\"Processing {file}\")\n        await ctx.report_progress(i, len(files))\n        data, mime_type = await ctx.read_resource(f\"file://{file}\")\n    return \"Processing complete\"\n```\n\n## MCP Primitives Detailed Architecture\n\n### Resources - The Data Layer\n- **Static Resources**: Fixed data (PDFs, config files, documentation)\n- **Dynamic Resources**: Real-time data (database queries, API responses, live data)\n\nFlow: Server Defines \u2192 LLM Identifies Need \u2192 Client Requests \u2192 Server Executes Handler \u2192 Server Retrieves Data \u2192 Server Returns \u2192 LLM Uses Data\n\n### Tools - The Action Layer  \n- **Characteristics**: Model-controlled, action-oriented, side effects allowed\n- **Integration**: Function calling capabilities in LLMs\n- **Purpose**: Perform",
+      "frame": 2,
+      "length": 1024
+    },
+    {
+      "id": 3,
+      "text": "s in LLMs\n- **Purpose**: Perform operations, not just data retrieval\n\n### Prompts - The Interaction Layer\n- **Control**: User-controlled for explicit selection  \n- **Templates**: Reusable patterns for common interactions\n- **Context**: Can embed resource data dynamically\n\n## Gradio MCP Integration Patterns\n\n### Basic Gradio MCP Server\n```python\nimport gradio as gr\n\ndef letter_counter(word: str, letter: str) -> int:\n    return word.lower().count(letter.lower())\n\ndemo = gr.Interface(\n    fn=letter_counter,\n    inputs=[\"text\", \"text\"], \n    outputs=\"number\",\n    mcp_server=True  # Enable MCP\n)\ndemo.launch()\n```\n\n### Gradio MCP Client\n```python\nfrom mcp import MCPClient\nfrom smol_tools import CodeAgent\n\nclient = MCPClient(\"http://localhost:7860/gradio_api/mcp/sse\")\ntools = client.get_tools()\nagent = CodeAgent(model=\"gpt-4o\", tools=tools)\n\ndef respond(message, history):\n    return agent.run(message)\n\ndemo = gr.ChatInterface(fn=respond, type=\"messages\")\ndemo.",
+      "frame": 3,
+      "length": 967
+    },
+    {
+      "id": 4,
+      "text": "=respond, type=\"messages\")\ndemo.launch()\n```\n\n## MCP Sampling and AI Guidance\n\n### Sampling Concept\nAllows servers to delegate tasks back to client's LLM during tool execution. Creates bidirectional communication flow.\n\n### Server-Side Sampling\n```python\n@server.tool()\nasync def analyze_data(ctx: Context) -> str:\n    data = get_raw_data_for_analysis()\n    prompt = f\"Analyze this data: {data}\"\n    analysis_result = await ctx.sample(prompt)\n    return analysis_result\n```\n\n### Client-Side Handler\n```python\nasync def my_openai_handler(prompt: str, model: str = \"gpt-4o\") -> str:\n    response = openai_client.chat.completions.create(\n        model=model,\n        messages=[{\"role\": \"user\", \"content\": prompt}]\n    )\n    return response.choices[0].message.content\n```\n\n## MCP Debugging and Troubleshooting\n\n### Logging Best Practices\n```python\nimport logging, sys\nlogging.basicConfig(\n    level=logging.INFO,\n    format=\"%(asctime)s - %(name)s - %(levelname)s - %(message)s\",\n    stream=sys.",
+      "frame": 4,
+      "length": 991
+    },
+    {
+      "id": 5,
+      "text": "- %(message)s\",\n    stream=sys.stderr  # CRITICAL: Use stderr, not stdout\n)\n```\n\n### Common Issues Resolution\n1. **JSON Parsing Errors**: Use `warnings.filterwarnings(\"ignore\")` and `PYTHONWARNINGS=ignore`\n2. **Environment Variables**: Specify in claude_desktop_config.json env section\n3. **Working Directory**: Always use absolute paths\n4. **Connection Problems**: Check logs, test with MCP Inspector\n\n### Process Management\n```python\ndef setup_signal_handlers():\n    def signal_handler(signum, frame):\n        logger.info(f\"Received signal {signum}, shutting down gracefully\")\n        cleanup_resources()\n        sys.exit(0)\n    signal.signal(signal.SIGTERM, signal_handler)\n    signal.signal(signal.SIGINT, signal_handler)\n```\n\n## User Workspace Configuration\n\n### Environment\n- OS: Pop! OS (Ubuntu-based Linux)  \n- GPU: NVIDIA RTX 3060 12GB, RAM: 64GB\n- GitHub: angrysky56\n- Base Directory: /home/ty/Repositories/ai_workspace\n\n### Development Preferences\n- Package Manager: uv (preferred), then TypeScript, then Go\n- Co",
+      "frame": 5,
+      "length": 1023
+    },
+    {
+      "id": 6,
+      "text": "), then TypeScript, then Go\n- Code Standards: Type hints required, docstrings for public APIs\n- File Operations: Edit existing files vs rewriting\n- Server Management: User handles start/stop, not assistant\n- Path Usage: Absolute paths for reliability\n\n### MCP Development Standards\n- Framework: FastMCP preferred over low-level MCP\n- Language: Python first, then TypeScript, then Go  \n- Architecture: OS-agnostic design\n- Logging: Always to stderr for MCP compatibility\n- Error Handling: Comprehensive with meaningful messages\n- Cleanup: Proper resource cleanup and signal handling\n\n## Memvid MCP Server Implementation\n\n### Real Memvid API (v0.1.0)\n```python\nencoder.build_video(\n    output_file: str, \n    index_file: str, \n    codec: str = 'h265',\n    show_progress: bool = True, \n    auto_build_docker: bool = True, \n    allow_fallback: bool = True\n) -> Dict[str, Any]\n```\n\n### Status Progression (Correct Implementation)\n- `encoder_ready: false \u2192 true` (lazy initialization)\n- `retriever_ready: false` until build_video(",
+      "frame": 6,
+      "length": 1024
+    },
+    {
+      "id": 7,
+      "text": "ready: false` until build_video() succeeds\n- `chat_ready: false` until build_video() succeeds  \n- `active_connections: 0` (connection counter)\n\n### Lifecycle Management\n```python\n@asynccontextmanager\nasync def lifespan(server: FastMCP) -> AsyncIterator[ServerState]:\n    try:\n        await _server_state.initialize()\n        yield _server_state\n    except Exception as e:\n        logger.error(f\"Lifespan error: {e}\")\n        raise\n    finally:\n        await _server_state.cleanup()\n```\n\n### Error Handling Pattern\n```python\n@mcp.tool()\nasync def tool_name(ctx: Context, param: str) -> dict[str, Any]:\n    try:\n        if not param:\n            raise ValueError(\"Parameter is required\")\n        result = perform_operation(param)\n        logger.info(\"Operation completed successfully\")\n        return {\"status\": \"success\", \"result\": result}\n    except Exception as e:\n        logger.",
+      "frame": 7,
+      "length": 881
+    },
+    {
+      "id": 8,
+      "text": "Exception as e:\n        logger.error(f\"Operation failed: {e}\")\n        return {\"status\": \"error\", \"message\": str(e)}\n```\n\nThis knowledge base contains all the essential information for developing production-ready MCP servers, including best practices, troubleshooting guides, implementation patterns, and working examples. It covers everything from basic setup to advanced features like sampling and AI guidance.",
+      "frame": 8,
+      "length": 412
+    },
+    {
+      "id": 9,
+      "text": "# MCP Implementation Examples and Advanced Patterns\n\n## Complete FastMCP Server Template\n```python\nimport asyncio, atexit, logging, signal, sys, warnings\nfrom contextlib import asynccontextmanager\nfrom typing import Any, Optional\nfrom collections.abc import AsyncIterator\nfrom mcp.server.fastmcp import FastMCP, Context\n\nwarnings.filterwarnings(\"ignore\")\n\nlogging.basicConfig(\n    level=logging.INFO,\n    format=\"%(asctime)s - %(name)s - %(levelname)s - %(message)s\",\n    stream=sys.stderr,\n)\nlogger = logging.getLogger(__name__)\n\nclass ServerState:\n    def __init__(self):\n        self.connections: dict[str, Any] = {}\n        self.initialized = False\n    \n    async def initialize(self) -> None:\n        if self.initialized: return\n        try:\n            logger.info(\"Initializing server resources\")\n            self.initialized = True\n        except Exception as e:\n            logger.error(f\"Initialization failed: {e}\")\n            raise\n    \n    async def cleanup(self) -> None:\n        if not self.",
+      "frame": 9,
+      "length": 1007
+    },
+    {
+      "id": 10,
+      "text": "f) -> None:\n        if not self.initialized: return\n        logger.info(\"Cleaning up server resources\")\n        for conn_id, conn in self.connections.items():\n            try:\n                if hasattr(conn, 'close'):\n                    if asyncio.iscoroutinefunction(conn.close):\n                        await conn.close()\n                    else: conn.close()\n            except Exception as e:\n                logger.warning(f\"Connection cleanup failed for {conn_id}: {e}\")\n        self.connections.clear()\n        self.initialized = False\n\n_server_state = ServerState()\n\n@asynccontextmanager\nasync def lifespan(server: FastMCP) -> AsyncIterator[ServerState]:\n    try:\n        await _server_state.initialize()\n        yield _server_state\n    except Exception as e:\n        logger.error(f\"Lifespan error: {e}\")\n        raise\n    finally:\n        await _server_state.cleanup()\n\nmcp = FastMCP(\"example-server\", lifespan=lifespan)\n\n@mcp.",
+      "frame": 10,
+      "length": 939
+    },
+    {
+      "id": 11,
+      "text": "rver\", lifespan=lifespan)\n\n@mcp.tool()\nasync def example_tool(ctx: Context, input_text: str) -> dict[str, Any]:\n    try:\n        if not input_text: raise ValueError(\"Input text is required\")\n        result = f\"Processed: {input_text}\"\n        logger.info(\"Tool executed successfully\")\n        return {\"status\": \"success\", \"result\": result}\n    except Exception as e:\n        logger.error(f\"Tool execution failed: {e}\")\n        return {\"status\": \"error\", \"message\": str(e)}\n\ndef setup_signal_handlers() -> None:\n    def signal_handler(signum: int, frame) -> None:\n        logger.info(f\"Received signal {signum}, shutting down gracefully\")\n        sys.exit(0)\n    signal.signal(signal.SIGTERM, signal_handler)\n    signal.signal(signal.SIGINT, signal_handler)\n\ndef cleanup_handler() -> None:\n    if _server_state.initialized:\n        try:\n            loop = asyncio.new_event_loop()\n            asyncio.set_event_loop(loop)\n            loop.run_until_complete(_server_state.cleanup())\n            loop.",
+      "frame": 11,
+      "length": 999
+    },
+    {
+      "id": 12,
+      "text": "ate.cleanup())\n            loop.close()\n        except Exception as e:\n            logger.error(f\"Cleanup handler error: {e}\")\n\natexit.register(cleanup_handler)\n\nif __name__ == \"__main__\":\n    setup_signal_handlers()\n    try:\n        logger.info(\"Starting MCP server\")\n        mcp.run()\n    except KeyboardInterrupt:\n        logger.info(\"Server interrupted by user\")\n    except Exception as e:\n        logger.error(f\"Server startup failed: {e}\")\n        sys.exit(1)\n```\n\n## Advanced Resource Patterns\n```python\n# Dynamic Resource with Database\n@server.resource()\nasync def user_profile(user_id: str) -> str:\n    user_data = DATABASE.get(user_id)\n    if user_data:\n        return json.dumps(user_data)\n    else:\n        return json.dumps({\"error\": f\"User {user_id} not found\"})\n\n# Static Resource with Caching\nFAQ_CONTENT = load_from_file(\"faq.txt\")\n@server.",
+      "frame": 12,
+      "length": 857
+    },
+    {
+      "id": 13,
+      "text": "ad_from_file(\"faq.txt\")\n@server.resource()\nasync def company_faq() -> str:\n    return FAQ_CONTENT\n```\n\n## Multi-Step Sampling Workflows\n```python\nasync def complex_analysis(ctx: Context, data: dict) -> str:\n    # Step 1: Initial analysis\n    initial_prompt = f\"Analyze this data and identify key patterns: {data}\"\n    initial_analysis = await ctx.sample(initial_prompt)\n    \n    # Step 2: Deep dive based on initial findings\n    deep_dive_prompt = f\"\"\"\n    Based on this initial analysis: {initial_analysis}\n    Perform a deeper investigation of the most significant patterns.\n    \"\"\"\n    deep_analysis = await ctx.sample(deep_dive_prompt)\n    \n    # Step 3: Executive summary\n    summary_prompt = f\"\"\"\n    Create an executive summary combining these analyses:\n    Initial: {initial_analysis}\n    Detailed: {deep_analysis}\n    Focus on actionable insights.\n    \"\"\"\n    return await ctx.sample(summary_prompt)\n```\n\n## Error Handling and Security Patterns\n```python\ndef validate_file_path(path: str) -> bool:\n    if \"..",
+      "frame": 13,
+      "length": 1017
+    },
+    {
+      "id": 14,
+      "text": "h(path: str) -> bool:\n    if \"..\" in path or path.startswith(\"/\"): return False\n    allowed_extensions = [\".txt\", \".json\", \".csv\"]\n    return any(path.endswith(ext) for ext in allowed_extensions)\n\n@mcp.tool()\nasync def secure_file_read(ctx: Context, file_path: str) -> dict:\n    if not validate_file_path(file_path):\n        logger.warning(f\"Invalid file path attempted: {file_path}\")\n        return {\"status\": \"error\", \"message\": \"Invalid file path\"}\n    # Proceed with file reading...\n\n# Rate Limiting\nfrom collections import defaultdict\nimport time\n\nclass RateLimiter:\n    def __init__(self, max_requests=10, window_seconds=60):\n        self.max_requests = max_requests\n        self.window_seconds = window_seconds\n        self.requests = defaultdict(list)\n    \n    def is_allowed(self, client_id: str) -> bool:\n        now = time.time()\n        window_start = now - self.window_seconds\n        self.requests[client_id] = [\n            req_time for req_time in self.",
+      "frame": 14,
+      "length": 969
+    },
+    {
+      "id": 15,
+      "text": "req_time for req_time in self.requests[client_id]\n            if req_time > window_start\n        ]\n        if len(self.requests[client_id]) >= self.max_requests:\n            return False\n        self.requests[client_id].append(now)\n        return True\n```\n\n## Configuration Templates\n```json\n// claude_desktop_config.json template\n{\n  \"mcpServers\": {\n    \"server-name\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"/absolute/path/to/server\",\n        \"run\",\n        \"python\",\n        \"server_module/main.py\"\n      ],\n      \"env\": {\n        \"PYTHONWARNINGS\": \"ignore\",\n        \"LOG_LEVEL\": \"INFO\",\n        \"API_KEY\": \"your_api_key_here\"\n      }\n    }\n  }\n}\n```\n\n## Gradio Advanced Integration\n```python\n# Custom MCP Server with FastMCP + Gradio Client\nfrom mcp.server.fastmcp import FastMCP\nimport subprocess\n\nmcp = FastMCP(\"Custom Tools Server\")\n\n@mcp.tool()\ndef run_shell_command(command: str) -> str:\n    result = subprocess.",
+      "frame": 15,
+      "length": 954
+    },
+    {
+      "id": 16,
+      "text": "-> str:\n    result = subprocess.run(command, shell=True, capture_output=True, text=True)\n    return result.stdout\n\n# Modular Image Editing with Gradio Blocks\nimport gradio as gr\nfrom PIL import Image\n\ndef resize_image(image, width, height):\n    return image.resize((width, height))\n\ndef rotate_image(image, angle):\n    return image.rotate(angle)\n\nwith gr.Blocks(mcp_server=True) as demo:\n    with gr.Tab(\"Resize\"):\n        resize_interface = gr.Interface(resize_image, [...])\n    with gr.Tab(\"Rotate\"):\n        rotate_interface = gr.Interface(rotate_image, [...])\ndemo.launch()\n```\n\n## Debugging and Monitoring Patterns\n```python\n# Structured Logging with Context\nlogger.info(\"Tool execution\", extra={\n    \"tool_name\": \"analyze_data\",\n    \"execution_time\": 1.23,\n    \"user_id\": \"user_123\",\n    \"success\": True\n})\n\n# Performance Tracking\nimport time\nstart_time = time.time()\n# ... operation ...\nlogger.info(f\"Operation completed in {time.time() - start_time:.2f}s\")\n\n# Health Check Tool\n@mcp.",
+      "frame": 16,
+      "length": 991
+    },
+    {
+      "id": 17,
+      "text": "f}s\")\n\n# Health Check Tool\n@mcp.tool()\nasync def health_check(ctx: Context) -> dict[str, Any]:\n    return {\n        \"status\": \"healthy\",\n        \"timestamp\": time.time(),\n        \"memory_usage\": psutil.virtual_memory().percent,\n        \"active_connections\": len(connections),\n        \"uptime\": time.time() - start_time\n    }\n```\n\nThese patterns provide the foundation for building robust, production-ready MCP servers with proper error handling, security, monitoring, and integration capabilities.",
+      "frame": 17,
+      "length": 497
+    }
+  ],
+  "chunk_to_frame": {
+    "0": 0,
+    "1": 1,
+    "2": 2,
+    "3": 3,
+    "4": 4,
+    "5": 5,
+    "6": 6,
+    "7": 7,
+    "8": 8,
+    "9": 9,
+    "10": 10,
+    "11": 11,
+    "12": 12,
+    "13": 13,
+    "14": 14,
+    "15": 15,
+    "16": 16,
+    "17": 17
+  },
+  "frame_to_chunks": {
+    "0": [
+      0
+    ],
+    "1": [
+      1
+    ],
+    "2": [
+      2
+    ],
+    "3": [
+      3
+    ],
+    "4": [
+      4
+    ],
+    "5": [
+      5
+    ],
+    "6": [
+      6
+    ],
+    "7": [
+      7
+    ],
+    "8": [
+      8
+    ],
+    "9": [
+      9
+    ],
+    "10": [
+      10
+    ],
+    "11": [
+      11
+    ],
+    "12": [
+      12
+    ],
+    "13": [
+      13
+    ],
+    "14": [
+      14
+    ],
+    "15": [
+      15
+    ],
+    "16": [
+      16
+    ],
+    "17": [
+      17
+    ]
+  },
+  "config": {
+    "qr": {
+      "version": 35,
+      "error_correction": "M",
+      "box_size": 5,
+      "border": 3,
+      "fill_color": "black",
+      "back_color": "white"
+    },
+    "codec": "h265",
+    "chunking": {
+      "chunk_size": 1024,
+      "overlap": 32
+    },
+    "retrieval": {
+      "top_k": 5,
+      "batch_size": 100,
+      "max_workers": 4,
+      "cache_size": 1000
+    },
+    "embedding": {
+      "model": "all-MiniLM-L6-v2",
+      "dimension": 384
+    },
+    "index": {
+      "type": "Flat",
+      "nlist": 100
+    },
+    "llm": {
+      "model": "gemini-2.0-flash-exp",
+      "max_tokens": 8192,
+      "temperature": 0.1,
+      "context_window": 32000
+    },
+    "chat": {
+      "max_history": 10,
+      "context_chunks": 5
+    },
+    "performance": {
+      "prefetch_frames": 50,
+      "decode_timeout": 10
+    }
+  }
+}

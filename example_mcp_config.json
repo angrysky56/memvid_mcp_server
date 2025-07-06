@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "memvid-mcp-server": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/home/ty/Repositories/memvid_mcp_server",
+        "run",
+        "python",
+        "memvid_mcp_server/main.py"
+      ],
+      "env": {
+        "PYTHONPATH": "/home/ty/Repositories/memvid_mcp_server",
+        "PYTHONWARNINGS": "ignore"
+      }
+    }
+  }
+}
