@@ -2,10 +2,12 @@
 Memvid MCP Server - An MCP server to expose Memvid functionalities to AI clients.
 
 A FastMCP server that provides video memory encoding, searching, and chat capabilities.
+Includes Docker lifecycle management for automatic container setup and teardown.
 """
 
 import asyncio
 import atexit
+import glob
 import logging
 import os
 import signal
@@ -18,6 +20,13 @@ from contextlib import asynccontextmanager, redirect_stdout
 from typing import Any, Optional
 
 from mcp.server.fastmcp import Context, FastMCP
+
+# Import Docker lifecycle manager
+try:
+    from .docker_lifecycle import DockerLifecycleManager
+except ImportError:
+    # Fallback for direct script execution
+    from docker_lifecycle import DockerLifecycleManager
 
 # Suppress ALL warnings to prevent JSON parsing errors
 warnings.filterwarnings("ignore")
@@ -67,6 +76,7 @@ class ServerState:
         self.encoder: Optional[Any] = None
         self.retriever: Optional[Any] = None
         self.chat: Optional[Any] = None
+        self.docker_manager = DockerLifecycleManager()
         self._shutdown_event = asyncio.Event()
 
     async def initialize(self) -> None:
@@ -75,7 +85,14 @@ class ServerState:
             return
 
         try:
-            logger.info("Initializing memvid MCP server")
+            logger.info("Initializing memvid MCP server with Docker lifecycle management")
+
+            # Initialize Docker environment first
+            docker_success = await self.docker_manager.initialize()
+            if docker_success:
+                logger.info("✅ Docker environment ready - memvid package will handle containers")
+            else:
+                logger.warning("⚠️ Docker initialization failed, memvid will use native mode")
 
             # Check if memvid is available
             if MemvidEncoder is None:
@@ -99,6 +116,9 @@ class ServerState:
         logger.info("Cleaning up memvid MCP server")
 
         try:
+            # Clean up Docker resources first
+            await self.docker_manager.cleanup()
+
             # Close connections
             for conn_id, conn in self.connections.items():
                 try:
@@ -169,11 +189,16 @@ def _ensure_encoder() -> Any:
 async def add_chunks(ctx: Context, chunks: list[str]) -> dict[str, Any]:
     """Add text chunks to the Memvid encoder.
 
+    WORKFLOW REQUIREMENT: After adding all content, you MUST call build_video()
+    before search_memory() or chat_with_memvid() will work.
+
     Args:
         chunks: A list of text chunks to add to the encoder.
 
     Returns:
         Status dictionary with success/error information.
+
+    Note: This only stages content. Call build_video() to complete the workflow.
     """
     try:
         encoder = _ensure_encoder()
@@ -191,12 +216,17 @@ async def add_chunks(ctx: Context, chunks: list[str]) -> dict[str, Any]:
 async def add_text(ctx: Context, text: str, metadata: Optional[dict] = None) -> dict[str, Any]:
     """Add text to the Memvid encoder.
 
+    WORKFLOW REQUIREMENT: After adding all content, you MUST call build_video()
+    before search_memory() or chat_with_memvid() will work.
+
     Args:
         text: The text content to add.
         metadata: Optional metadata for the text.
 
     Returns:
         Status dictionary with success/error information.
+
+    Note: This only stages content. Call build_video() to complete the workflow.
     """
     try:
         encoder = _ensure_encoder()
@@ -214,11 +244,16 @@ async def add_text(ctx: Context, text: str, metadata: Optional[dict] = None) -> 
 async def add_pdf(ctx: Context, pdf_path: str) -> dict[str, Any]:
     """Add a PDF file to the Memvid encoder.
 
+    WORKFLOW REQUIREMENT: After adding all content, you MUST call build_video()
+    before search_memory() or chat_with_memvid() will work.
+
     Args:
         pdf_path: The path to the PDF file to add.
 
     Returns:
         Status dictionary with success/error information.
+
+    Note: This only stages content. Call build_video() to complete the workflow.
     """
     try:
         encoder = _ensure_encoder()
@@ -273,7 +308,25 @@ async def build_video(
         if MemvidRetriever and MemvidChat:
             with redirect_stdout(sys.stderr):
                 _server_state.retriever = MemvidRetriever(video_path, index_path)
-                _server_state.chat = MemvidChat(video_path, index_path)
+                # Custom config with higher max_tokens for longer responses
+                chat_config = {
+                    "llm": {
+                        "max_tokens": 8192,
+                        "temperature": 0.1,
+                        "context_window": 32000,
+                    },
+                    "chat": {
+                        "max_history": 10,
+                        "context_chunks": 8,  # More context chunks
+                    }
+                }
+                _server_state.chat = MemvidChat(
+                    video_path,
+                    index_path,
+                    llm_provider='google',  # Back to Google as requested
+                    llm_model='gemini-2.0-flash-exp',
+                    config=chat_config
+                )
 
         logger.info(f"Successfully built video: {video_path}")
         return {
@@ -335,11 +388,197 @@ async def chat_with_memvid(ctx: Context, message: str) -> dict[str, Any]:
 
         # Perform chat with stdout redirected to prevent LLM library output
         with redirect_stdout(sys.stderr):
-            response = _server_state.chat.chat(message)
-        logger.info(f"Chat completed for message: '{message[:50]}...'")
+            # Check if LLM is available, if not, provide full context without truncation
+            if not _server_state.chat.llm_client:
+                # Get full context without LLM truncation
+                context_chunks = _server_state.chat.search_context(message, top_k=8)
+                if context_chunks:
+                    response = "Based on the knowledge base, here's what I found:\n\n"
+                    for i, chunk in enumerate(context_chunks):
+                        response += f"{i+1}. {chunk}\n\n"
+                    response = response.strip()
+                else:
+                    response = "I couldn't find any relevant information in the knowledge base."
+            else:
+                response = _server_state.chat.chat(
+                    message,
+                    max_context_tokens=400000  # Increase context for better responses
+                )
+        logger.info(f"Chat completed for message: '{message[:8164]}...'")
         return {"status": "success", "message": message, "response": response}
     except Exception as e:
         logger.error(f"Chat failed for message '{message}': {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@mcp.tool()
+async def list_video_memories(ctx: Context, directory: str = ".") -> dict[str, Any]:
+    """List available video memory files in a directory.
+
+    Searches for .mp4/.json pairs that represent complete video memories.
+
+    Args:
+        directory: Directory to search for video memory files (default: current directory)
+
+    Returns:
+        Dictionary with list of discovered video memory files and their info.
+    """
+    try:
+        import glob
+        import os
+
+        # Find all .mp4 files in directory
+        mp4_pattern = os.path.join(directory, "*.mp4")
+        mp4_files = glob.glob(mp4_pattern)
+
+        video_memories = []
+        for mp4_file in mp4_files:
+            base_name = os.path.splitext(mp4_file)[0]
+            json_file = f"{base_name}.json"
+
+            if os.path.exists(json_file):
+                try:
+                    stat_mp4 = os.stat(mp4_file)
+                    stat_json = os.stat(json_file)
+
+                    video_memories.append({
+                        "name": os.path.basename(base_name),
+                        "video_path": mp4_file,
+                        "index_path": json_file,
+                        "video_size_mb": round(stat_mp4.st_size / (1024*1024), 2),
+                        "index_size_kb": round(stat_json.st_size / 1024, 2),
+                        "created": stat_mp4.st_mtime
+                    })
+                except Exception as e:
+                    logger.warning(f"Could not stat files for {base_name}: {e}")
+
+        video_memories.sort(key=lambda x: x["created"], reverse=True)
+
+        return {
+            "status": "success",
+            "directory": directory,
+            "video_memories": video_memories,
+            "count": len(video_memories)
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to list video memories in {directory}: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@mcp.tool()
+async def load_video_memory(ctx: Context, video_path: str, index_path: str) -> dict[str, Any]:
+    """Load an existing video memory for search and chat.
+
+    This allows switching to a different video memory without rebuilding.
+
+    Args:
+        video_path: Path to existing .mp4 video memory file
+        index_path: Path to existing .json index file
+
+    Returns:
+        Status dictionary indicating success/failure of loading operation.
+    """
+    try:
+        import os
+
+        # Verify files exist
+        if not os.path.exists(video_path):
+            return {"status": "error", "message": f"Video file not found: {video_path}"}
+        if not os.path.exists(index_path):
+            return {"status": "error", "message": f"Index file not found: {index_path}"}
+
+        if not _check_memvid_available():
+            return {"status": "error", "message": "Memvid not available - please install memvid package"}
+
+        # Check if MemvidRetriever and MemvidChat are available
+        if MemvidRetriever is None or MemvidChat is None:
+            return {"status": "error", "message": "MemvidRetriever or MemvidChat is not available. Please ensure the memvid package is installed correctly."}
+
+        # Load retriever and chat with existing video memory
+        with redirect_stdout(sys.stderr):
+            _server_state.retriever = MemvidRetriever(video_path, index_path)
+            # Custom config with higher max_tokens for longer responses
+            chat_config = {
+                "llm": {
+                    "max_tokens": 8192,
+                    "temperature": 0.1,
+                    "context_window": 32000,
+                },
+                "chat": {
+                    "max_history": 10,
+                    "context_chunks": 8,  # More context chunks
+                }
+            }
+            _server_state.chat = MemvidChat(
+                video_path,
+                index_path,
+                llm_provider='google',  # Back to Google as requested
+                llm_model='gemini-2.0-flash-exp',
+                config=chat_config
+            )
+
+        logger.info(f"Successfully loaded video memory: {video_path}")
+        return {
+            "status": "success",
+            "video_path": video_path,
+            "index_path": index_path,
+            "message": f"Loaded video memory: {os.path.basename(video_path)}"
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to load video memory {video_path}: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@mcp.tool()
+async def get_current_video_info(ctx: Context) -> dict[str, Any]:
+    """Get information about the currently loaded video memory.
+
+    Returns details about the active video memory including paths and stats.
+
+    Returns:
+        Dictionary with current video memory information or error if none loaded.
+    """
+    try:
+        if not _server_state.retriever or not _server_state.chat:
+            return {
+                "status": "info",
+                "message": "No video memory currently loaded. Use build_video or load_video_memory first."
+            }
+
+        # Try to get basic info from the retriever/chat objects
+        info = {
+            "status": "success",
+            "retriever_ready": _server_state.retriever is not None,
+            "chat_ready": _server_state.chat is not None,
+        }
+
+        # Try to extract file paths if available in the objects
+        try:
+            if hasattr(_server_state.retriever, 'video_path'):
+                info["video_path"] = _server_state.retriever.video_path
+            if hasattr(_server_state.retriever, 'index_path'):
+                info["index_path"] = _server_state.retriever.index_path
+
+            # Get file sizes if paths are available
+            if "video_path" in info and "index_path" in info:
+                import os
+                if os.path.exists(info["video_path"]):
+                    stat_mp4 = os.stat(info["video_path"])
+                    info["video_size_mb"] = round(stat_mp4.st_size / (1024*1024), 2)
+                if os.path.exists(info["index_path"]):
+                    stat_json = os.stat(info["index_path"])
+                    info["index_size_kb"] = round(stat_json.st_size / 1024, 2)
+
+        except Exception as e:
+            logger.warning(f"Could not extract detailed info: {e}")
+            info["message"] = "Video memory loaded but could not extract detailed file info"
+
+        return info
+
+    except Exception as e:
+        logger.error(f"Failed to get current video info: {e}")
         return {"status": "error", "message": str(e)}
 
 
@@ -348,7 +587,7 @@ async def get_server_status(ctx: Context) -> dict[str, Any]:
     """Get the current status of the memvid server.
 
     Returns:
-        Server status information including version details.
+        Server status information including version details and Docker status.
     """
     try:
         # Check memvid version if available
@@ -360,6 +599,9 @@ async def get_server_status(ctx: Context) -> dict[str, Any]:
             except Exception:
                 memvid_version = "version check failed"
 
+        # Get Docker status
+        docker_status = _server_state.docker_manager.get_status()
+
         status = {
             "status": "success",
             "server_initialized": _server_state.initialized,
@@ -368,7 +610,8 @@ async def get_server_status(ctx: Context) -> dict[str, Any]:
             "encoder_ready": _server_state.encoder is not None,
             "retriever_ready": _server_state.retriever is not None,
             "chat_ready": _server_state.chat is not None,
-            "active_connections": len(_server_state.connections)
+            "active_connections": len(_server_state.connections),
+            "docker_status": docker_status
         }
         return status
     except Exception as e:

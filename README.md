@@ -35,18 +35,18 @@ uv add -e .
 ```
 ### H.265 Encoding with Docker
 
-To enable H.265 video compression, you need to build the `memvid-h265` Docker container. This container provides the necessary FFmpeg environment for H.265
-encoding.
+The server automatically manages Docker installation and lifecycle:
 
-1.  **Navigate to the `memvid` repository root:**
-    ```bash
-    cd /memvid
-    ```
-2.  **Build the Docker image:**
-    ```bash
-    docker build -f docker/Dockerfile -t memvid-h265 docker/
-    ```
-    This command builds the Docker image named `memvid-h265` using the `Dockerfile` located in the `docker/` directory.
+1. **Automatic Docker Setup**: If Docker is not installed, the server will install it automatically
+2. **Container Management**: The memvid package handles its own Docker container building and management  
+3. **Lifecycle Management**: Docker daemon is started when MCP server starts
+
+The memvid package (installed in the venv) contains all necessary Docker configurations and will automatically:
+- Build the `memvid-h265` container when needed
+- Use Docker for H.265 encoding when `codec='h265'` is specified
+- Handle all container lifecycle internally
+
+No manual Docker setup or external repository paths are required.h265` using the `Dockerfile` located in the `docker/` directory.
 
 Once the Docker image is built, `memvid` will automatically detect and use it when `video_codec='h265'` is specified in `build_video`.
 
