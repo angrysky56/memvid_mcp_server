@@ -8,8 +8,6 @@ import asyncio
 import logging
 import os
 import shutil
-import subprocess
-import sys
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -35,14 +33,18 @@ class DockerLifecycleManager:
         """Ensure Docker is installed, install if needed."""
         try:
             if self.docker_cmd:
-                result = subprocess.run([self.docker_cmd, "--version"], 
-                                      capture_output=True, timeout=5)
-                if result.returncode == 0:
+                proc = await asyncio.create_subprocess_exec(
+                    self.docker_cmd, "--version",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                await asyncio.wait_for(proc.wait(), timeout=5)
+                if proc.returncode == 0:
                     logger.info(f"✅ Docker already installed: {self.docker_cmd}")
                     return True
 
             logger.info("🔧 Installing Docker...")
-            
+
             current_user = os.getenv('USER') or os.getenv('USERNAME') or 'ubuntu'
             install_commands = [
                 "sudo apt-get update",
@@ -57,9 +59,14 @@ class DockerLifecycleManager:
             ]
 
             for cmd in install_commands:
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-                if result.returncode != 0:
-                    logger.error(f"Command failed: {cmd} - {result.stderr}")
+                proc = await asyncio.create_subprocess_shell(
+                    cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                await proc.wait()
+                if proc.returncode != 0:
+                    logger.error(f"Command failed: {cmd}")
                     return False
 
             self.docker_cmd = self._find_docker_command()
@@ -76,13 +83,15 @@ class DockerLifecycleManager:
                 return False
 
             # Check if already running
-            result = subprocess.run(
-                [self.docker_cmd, "ps", "-q", "-f", f"ancestor={self.container_name}"],
-                capture_output=True, timeout=10
+            proc = await asyncio.create_subprocess_exec(
+                self.docker_cmd, "ps", "-q", "-f", f"ancestor={self.container_name}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
             )
-            
-            if result.returncode == 0 and result.stdout.strip():
-                self.container_id = result.stdout.strip()
+            stdout, _ = await proc.communicate()
+
+            if proc.returncode == 0 and stdout.strip():
+                self.container_id = stdout.decode().strip()
                 logger.info(f"✅ Container already running: {self.container_id}")
                 return True
 
@@ -94,14 +103,19 @@ class DockerLifecycleManager:
                 "sleep", "infinity"
             ]
 
-            result = subprocess.run(start_cmd, capture_output=True, text=True, timeout=30)
+            proc = await asyncio.create_subprocess_exec(
+                *start_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate()
 
-            if result.returncode == 0:
-                self.container_id = result.stdout.strip()
+            if proc.returncode == 0:
+                self.container_id = stdout.decode().strip()
                 logger.info(f"✅ Container started: {self.container_id}")
                 return True
             else:
-                logger.error(f"Failed to start container: {result.stderr}")
+                logger.error(f"Failed to start container: {stderr.decode() if stderr else 'Unknown error'}")
                 return False
 
         except Exception as e:
@@ -114,16 +128,22 @@ class DockerLifecycleManager:
             if not self.docker_cmd or not self.container_id:
                 return
 
-            subprocess.run(
-                [self.docker_cmd, "stop", f"{self.container_name}-session"],
-                capture_output=True, timeout=30
+            # Stop container
+            proc = await asyncio.create_subprocess_exec(
+                self.docker_cmd, "stop", f"{self.container_name}-session",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
             )
-            
-            subprocess.run(
-                [self.docker_cmd, "rm", f"{self.container_name}-session"],
-                capture_output=True, timeout=30
+            await asyncio.wait_for(proc.wait(), timeout=30)
+
+            # Remove container
+            proc = await asyncio.create_subprocess_exec(
+                self.docker_cmd, "rm", f"{self.container_name}-session",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
             )
-            
+            await asyncio.wait_for(proc.wait(), timeout=30)
+
             self.container_id = None
             logger.info("✅ Container stopped")
 
@@ -134,7 +154,7 @@ class DockerLifecycleManager:
         """Initialize Docker and start container."""
         if not await self.ensure_docker_installed():
             return False
-        
+
         return await self.start_container()
 
     async def cleanup(self) -> None:
