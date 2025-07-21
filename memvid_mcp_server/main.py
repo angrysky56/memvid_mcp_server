@@ -122,6 +122,38 @@ class ServerState:
         self.available_memories: dict[str, dict] = {}
         # FAISS configuration
         self.faiss_type: str = "none"
+        # Library directory path (where the server is installed)
+        self.library_dir = self._detect_library_directory()
+
+    def _detect_library_directory(self) -> str:
+        """Detect the library directory relative to the server installation."""
+        try:
+            # Get the directory containing this script
+            script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            library_dir = os.path.join(script_dir, "library")
+            
+            # Create library directory if it doesn't exist
+            os.makedirs(library_dir, exist_ok=True)
+            
+            logger.info(f"Using library directory: {library_dir}")
+            return library_dir
+        except Exception as e:
+            logger.error(f"Failed to detect library directory: {e}")
+            # Fallback to current directory
+            fallback_dir = os.path.join(os.getcwd(), "library")
+            os.makedirs(fallback_dir, exist_ok=True)
+            return fallback_dir
+
+    def resolve_file_path(self, path: str, file_type: str = "video") -> str:
+        """Resolve file path, using library directory for relative paths."""
+        if os.path.isabs(path):
+            # Absolute path - use as is
+            return path
+        else:
+            # Relative path - resolve to library directory
+            resolved_path = os.path.join(self.library_dir, path)
+            logger.info(f"Resolved relative path '{path}' to '{resolved_path}'")
+            return resolved_path
 
     async def initialize(self) -> None:
         """Initialize server resources."""
@@ -262,10 +294,14 @@ async def _ensure_encoder() -> Any:
 async def _rebuild_memory_from_json(video_path: str, index_path: str) -> bool:
     """Rebuild a memory from its JSON metadata when the video is corrupted/incompatible."""
     try:
-        logger.info(f"Attempting to rebuild memory from {index_path}")
+        # Resolve paths (in case relative paths were passed)
+        resolved_video_path = _server_state.resolve_file_path(video_path, "video")
+        resolved_index_path = _server_state.resolve_file_path(index_path, "index")
+        
+        logger.info(f"Attempting to rebuild memory from {resolved_index_path}")
 
         # Read the JSON metadata
-        with open(index_path, 'r') as f:
+        with open(resolved_index_path, 'r') as f:
             metadata = json.load(f)
 
         if 'metadata' not in metadata:
@@ -297,15 +333,15 @@ async def _rebuild_memory_from_json(video_path: str, index_path: str) -> bool:
         # Rebuild the video
         with redirect_stdout(sys.stderr):
             encoder.build_video(
-                output_file=video_path,
-                index_file=index_path,
+                output_file=resolved_video_path,
+                index_file=resolved_index_path,
                 codec='h265',
                 show_progress=False,  # Silent rebuild
                 auto_build_docker=True,
                 allow_fallback=True
             )
 
-        logger.info(f"Successfully rebuilt memory: {video_path}")
+        logger.info(f"Successfully rebuilt memory: {resolved_video_path}")
         return True
 
     except Exception as e:
@@ -408,8 +444,8 @@ async def build_video(
     """Build the video memory from the added chunks.
 
     Args:
-        video_path: The path to save the video file.
-        index_path: The path to save the index file.
+        video_path: The path to save the video file (relative paths use library directory).
+        index_path: The path to save the index file (relative paths use library directory).
         codec: Video codec to use ('h265' or 'h264', default: 'h265').
         show_progress: Whether to show progress during build (default: True).
         auto_build_docker: Whether to auto-build docker if needed (default: True).
@@ -421,11 +457,15 @@ async def build_video(
     try:
         encoder = await _ensure_encoder()
 
+        # Resolve paths using library directory for relative paths
+        resolved_video_path = _server_state.resolve_file_path(video_path, "video")
+        resolved_index_path = _server_state.resolve_file_path(index_path, "index")
+
         # Call build_video with stdout redirected to prevent progress bars
         with redirect_stdout(sys.stderr):
             build_result = encoder.build_video(
-                output_file=video_path,
-                index_file=index_path,
+                output_file=resolved_video_path,
+                index_file=resolved_index_path,
                 codec=codec,
                 show_progress=show_progress,
                 auto_build_docker=auto_build_docker,
@@ -440,28 +480,28 @@ async def build_video(
                     logger.error("MemvidRetriever or MemvidChat is not available")
                     return {
                         "status": "partial_success",
-                        "video_path": video_path,
-                        "index_path": index_path,
+                        "video_path": resolved_video_path,
+                        "index_path": resolved_index_path,
                         "codec": codec,
                         "build_result": build_result,
                         "warning": "Video built but MemvidRetriever/Chat not available for initialization"
                     }
 
                 with redirect_stdout(sys.stderr):
-                    _server_state.retriever = MemvidRetriever(video_path, index_path)
-                    _server_state.chat = MemvidChat(video_path, index_path)
+                    _server_state.retriever = MemvidRetriever(resolved_video_path, resolved_index_path)
+                    _server_state.chat = MemvidChat(resolved_video_path, resolved_index_path)
 
                 # Update state tracking
-                _server_state.set_active_memory(video_path, index_path)
+                _server_state.set_active_memory(resolved_video_path, resolved_index_path)
 
-                logger.info(f"Successfully built and loaded video memory: {video_path}")
+                logger.info(f"Successfully built and loaded video memory: {resolved_video_path}")
             except Exception as e:
                 logger.error(f"Failed to initialize retriever/chat after build: {e}")
                 # Build succeeded but initialization failed
                 return {
                     "status": "partial_success",
-                    "video_path": video_path,
-                    "index_path": index_path,
+                    "video_path": resolved_video_path,
+                    "index_path": resolved_index_path,
                     "codec": codec,
                     "build_result": build_result,
                     "warning": f"Video built but failed to initialize retriever/chat: {str(e)}"
@@ -469,8 +509,8 @@ async def build_video(
 
         return {
             "status": "success",
-            "video_path": video_path,
-            "index_path": index_path,
+            "video_path": resolved_video_path,
+            "index_path": resolved_index_path,
             "codec": codec,
             "build_result": build_result,
             "message": "Video memory built and loaded successfully"
@@ -554,7 +594,7 @@ async def chat_with_memvid(ctx: Context, message: str) -> dict[str, Any]:
                 "message": "Chat returned None - chat system may be corrupted. Try loading or rebuilding the memory."
             }
 
-        logger.info(f"Chat completed for message: '{message[:50]}...'")
+        logger.info(f"Chat completed for message: '{message[:8164]}...'")
 
         # Include current memory info in response
         current_memory = "Unknown"
@@ -572,19 +612,23 @@ async def chat_with_memvid(ctx: Context, message: str) -> dict[str, Any]:
         return {"status": "error", "message": str(e)}
 
 @mcp.tool()
-async def list_video_memories(ctx: Context, directory: str = ".") -> dict[str, Any]:
+async def list_video_memories(ctx: Context, directory: str = None) -> dict[str, Any]:
     """List available video memory files in a directory.
 
     Searches for .mp4/.json pairs that represent complete video memories.
     Also updates the server's memory library state.
 
     Args:
-        directory: Directory to search for video memory files (default: current directory)
+        directory: Directory to search for video memory files (defaults to server library directory)
 
     Returns:
         Dictionary with list of discovered video memory files and their info.
     """
     try:
+        # Use library directory as default
+        if directory is None:
+            directory = _server_state.library_dir
+        
         # Find all .mp4 files in directory
         mp4_pattern = os.path.join(directory, "*.mp4")
         mp4_files = glob.glob(mp4_pattern)
@@ -646,18 +690,22 @@ async def load_video_memory(ctx: Context, video_path: str, index_path: str) -> d
     If the memory fails to load, it will attempt to auto-rebuild from the JSON metadata.
 
     Args:
-        video_path: Path to existing .mp4 video memory file
-        index_path: Path to existing .json index file
+        video_path: Path to existing .mp4 video memory file (relative paths use library directory)
+        index_path: Path to existing .json index file (relative paths use library directory)
 
     Returns:
         Status dictionary indicating success/failure of loading operation.
     """
     try:
+        # Resolve paths using library directory for relative paths
+        resolved_video_path = _server_state.resolve_file_path(video_path, "video")
+        resolved_index_path = _server_state.resolve_file_path(index_path, "index")
+        
         # Verify files exist
-        if not os.path.exists(video_path):
-            return {"status": "error", "message": f"Video file not found: {video_path}"}
-        if not os.path.exists(index_path):
-            return {"status": "error", "message": f"Index file not found: {index_path}"}
+        if not os.path.exists(resolved_video_path):
+            return {"status": "error", "message": f"Video file not found: {resolved_video_path}"}
+        if not os.path.exists(resolved_index_path):
+            return {"status": "error", "message": f"Index file not found: {resolved_index_path}"}
 
         if not _check_memvid_available():
             return {"status": "error", "message": "Memvid not available - please install memvid package"}
@@ -666,8 +714,8 @@ async def load_video_memory(ctx: Context, video_path: str, index_path: str) -> d
         def try_load_memory():
             """Try to load the memory and return success status."""
             try:
-                logger.info(f"Attempting to load retriever from {video_path}, {index_path}")
-                logger.info(f"File sizes - Video: {os.path.getsize(video_path)} bytes, Index: {os.path.getsize(index_path)} bytes")
+                logger.info(f"Attempting to load retriever from {resolved_video_path}, {resolved_index_path}")
+                logger.info(f"File sizes - Video: {os.path.getsize(resolved_video_path)} bytes, Index: {os.path.getsize(resolved_index_path)} bytes")
 
                 # Check if MemvidRetriever and MemvidChat are available
                 if MemvidRetriever is None or MemvidChat is None:
@@ -675,8 +723,8 @@ async def load_video_memory(ctx: Context, video_path: str, index_path: str) -> d
 
                 # Try initializing retriever first
                 with redirect_stdout(sys.stderr):
-                    retriever = MemvidRetriever(video_path, index_path)
-                    chat = MemvidChat(video_path, index_path)
+                    retriever = MemvidRetriever(resolved_video_path, resolved_index_path)
+                    chat = MemvidChat(resolved_video_path, resolved_index_path)
 
                 # Test if retriever actually works
                 logger.info("Testing retriever functionality...")
@@ -691,7 +739,7 @@ async def load_video_memory(ctx: Context, video_path: str, index_path: str) -> d
                 # If we get here, everything works
                 _server_state.retriever = retriever
                 _server_state.chat = chat
-                _server_state.set_active_memory(video_path, index_path)
+                _server_state.set_active_memory(resolved_video_path, resolved_index_path)
 
                 return True, "Memory loaded successfully"
 
@@ -703,18 +751,18 @@ async def load_video_memory(ctx: Context, video_path: str, index_path: str) -> d
         success, message = try_load_memory()
 
         if success:
-            logger.info(f"Successfully loaded video memory: {video_path}")
+            logger.info(f"Successfully loaded video memory: {resolved_video_path}")
             return {
                 "status": "success",
-                "video_path": video_path,
-                "index_path": index_path,
-                "message": f"Loaded video memory: {os.path.basename(video_path)}"
+                "video_path": resolved_video_path,
+                "index_path": resolved_index_path,
+                "message": f"Loaded video memory: {os.path.basename(resolved_video_path)}"
             }
 
         # If direct load failed, attempt auto-rebuild
         logger.info(f"Direct load failed ({message}), attempting auto-rebuild...")
 
-        rebuild_success = await _rebuild_memory_from_json(video_path, index_path)
+        rebuild_success = await _rebuild_memory_from_json(resolved_video_path, resolved_index_path)
         if not rebuild_success:
             return {
                 "status": "error",
@@ -725,12 +773,12 @@ async def load_video_memory(ctx: Context, video_path: str, index_path: str) -> d
         success, message = try_load_memory()
 
         if success:
-            logger.info(f"Successfully loaded video memory after rebuild: {video_path}")
+            logger.info(f"Successfully loaded video memory after rebuild: {resolved_video_path}")
             return {
                 "status": "success",
-                "video_path": video_path,
-                "index_path": index_path,
-                "message": f"Auto-rebuilt and loaded video memory: {os.path.basename(video_path)}",
+                "video_path": resolved_video_path,
+                "index_path": resolved_index_path,
+                "message": f"Auto-rebuilt and loaded video memory: {os.path.basename(resolved_video_path)}",
                 "rebuilt": True
             }
         else:

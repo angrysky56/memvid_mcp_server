@@ -1,0 +1,91 @@
+{
+  "metadata": [
+    {
+      "id": 0,
+      "text": "Neuro-Inspired Conversational AI Architecture\n\n## Biological Blueprint for Conversation\n\nThis part explores the neurocomputational models of human dialogue, focusing on the brain's multi-timescale, asymmetric, predictive, and socially-embedded processing of conversation. The brain organizes content hierarchically across multiple timescales, integrating speech into nested linguistic structures (words, sentences, discourse).\n\n### Multi-Timescale Processing\nYamashita et al. (2025) used fMRI to measure brain activity during conversations and modeled neural representations with contextual embeddings from a Large Language Model (GPT) at varying temporal windows. The brain processes information across different temporal scales simultaneously.\n\n## Critical Analysis of Current LLM Architectures\n\nThis section examines the limitations of current Large Language Models (LLMs) in relation to the identified biological principles.",
+      "frame": 0,
+      "length": 928
+    },
+    {
+      "id": 1,
+      "text": "dentified biological principles. It highlights the divergence between LLMs and the biological mechanisms of human conversation, particularly:\n\n- Fixed context windows vs. multi-system memory\n- Uniform processing vs. multi-timescale organization\n- Symmetric architecture vs. asymmetric comprehension/production modules\n\n## Novel Conversational AI Architecture\n\nThis is the core proposal for a new, multi-component architecture inspired by neuroscience. It outlines the key modules and their functions:\n\n### Decoupled, Asymmetric Core\n- **Long-Timescale Comprehension Module**: Responsible for processing information over longer periods, maintaining context and understanding coherence across extended conversations\n- **Short-Timescale Production Module**: Responsible for generating responses in real-time, handling immediate conversational turns\n\n### Multi-System Memory Framework\nA memory system with different components to overcome the limitations of fixed context windows:\n- **Working Memory**: Immediate conversational",
+      "frame": 1,
+      "length": 1023
+    },
+    {
+      "id": 2,
+      "text": "ory**: Immediate conversational context and active information\n- **Episodic Memory**: Specific conversational events and experiences  \n- **Procedural Memory**: Learned conversational patterns and skills\n\n### Predictive Modulator\nA module for social governance and anticipation, allowing the AI to predict and adapt to the conversational partner's behavior. This enables:\n- Social context awareness\n- Conversational turn prediction\n- Adaptive response generation\n\n## Hybrid Implementation Strategy\n\nThis section discusses how to integrate existing LLMs into the proposed cognitive framework and considers the potential of neuromorphic hardware for future implementations:\n\n### Integration with Existing LLMs\n- Leveraging current transformer architectures as components\n- Building the asymmetric core around existing models\n- Implementing memory systems as external modules\n\n### Neuromorphic Hardware Considerations\nHardware designed to mimic the structure and function of the human brain, potentially enabling more efficient",
+      "frame": 2,
+      "length": 1023
+    },
+    {
+      "id": 3,
+      "text": "ntially enabling more efficient and biologically plausible AI implementations.\n\n## Key Technical Concepts\n\n- **Multi-Timescale Processing**: Hierarchical organization across temporal scales\n- **Asymmetric Architecture**: Separate comprehension and production pathways\n- **Predictive Modulation**: Anticipatory processing for social interaction\n- **Memory Integration**: Multiple memory systems working in coordination\n- **Biological Plausibility**: Architecture grounded in neuroscience research",
+      "frame": 3,
+      "length": 495
+    }
+  ],
+  "chunk_to_frame": {
+    "0": 0,
+    "1": 1,
+    "2": 2,
+    "3": 3
+  },
+  "frame_to_chunks": {
+    "0": [
+      0
+    ],
+    "1": [
+      1
+    ],
+    "2": [
+      2
+    ],
+    "3": [
+      3
+    ]
+  },
+  "config": {
+    "qr": {
+      "version": 35,
+      "error_correction": "M",
+      "box_size": 5,
+      "border": 3,
+      "fill_color": "black",
+      "back_color": "white"
+    },
+    "codec": "h265",
+    "chunking": {
+      "chunk_size": 1024,
+      "overlap": 32
+    },
+    "retrieval": {
+      "top_k": 5,
+      "batch_size": 100,
+      "max_workers": 4,
+      "cache_size": 1000
+    },
+    "embedding": {
+      "model": "all-MiniLM-L6-v2",
+      "dimension": 384
+    },
+    "index": {
+      "type": "Flat",
+      "nlist": 100
+    },
+    "llm": {
+      "model": "gemini-2.0-flash-exp",
+      "max_tokens": 8192,
+      "temperature": 0.1,
+      "context_window": 32000
+    },
+    "chat": {
+      "max_history": 10,
+      "context_chunks": 5
+    },
+    "performance": {
+      "prefetch_frames": 50,
+      "decode_timeout": 10
+    }
+  }
+}

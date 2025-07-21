@@ -1,0 +1,361 @@
+{
+  "metadata": [
+    {
+      "id": 0,
+      "text": "# Gemini CLI Configuration\n\nGemini CLI offers several ways to configure its behavior, including environment variables, command-line arguments, and settings files. This document outlines the different configuration methods and available settings.\n\n## Configuration layers\n\nConfiguration is applied in the following order of precedence (lower numbers are overridden by higher numbers):\n\n1.  **Default values:** Hardcoded defaults within the application.\n2.  **User settings file:** Global settings for the current user.\n3.  **Project settings file:** Project-specific settings.\n4.  **Environment variables:** System-wide or session-specific variables, potentially loaded from `.env` files.\n5.  **Command-line arguments:** Values passed when launching the CLI.\n\n## The user settings file and project settings file\n\nGemini CLI uses `settings.json` files for persistent configuration. There are two locations for these files:\n\n- **User settings file:**\n  - **Location:** `~/.gemini/settings.",
+      "frame": 0,
+      "length": 986
+    },
+    {
+      "id": 1,
+      "text": "Location:** `~/.gemini/settings.json` (where `~` is your home directory).\n  - **Scope:** Applies to all Gemini CLI sessions for the current user.\n- **Project settings file:**\n  - **Location:** `.gemini/settings.json` within your project's root directory.\n  - **Scope:** Applies only when running Gemini CLI from that specific project. Project settings override user settings.\n\n**Note on environment variables in settings:** String values within your `settings.json` files can reference environment variables using either `$VAR_NAME` or `${VAR_NAME}` syntax. These variables will be automatically resolved when the settings are loaded.",
+      "frame": 1,
+      "length": 634
+    },
+    {
+      "id": 2,
+      "text": "## Authentication Setup\n\nThe Gemini CLI requires you to authenticate with Google's AI services. On initial startup you'll need to configure **one** of the following authentication methods:\n\n1.  **Login with Google (Gemini Code Assist):**\n    - Use this option to log in with your google account.\n    - During initial startup, Gemini CLI will direct you to a webpage for authentication. Once authenticated, your credentials will be cached locally so the web login can be skipped on subsequent runs.\n    - Note that the web login must be done in a browser that can communicate with the machine Gemini CLI is being run from. (Specifically, the browser will be redirected to a localhost url that Gemini CLI will be listening on).\n    - Users may have to specify a GOOGLE_CLOUD_PROJECT if:\n      1. You have a Google Workspace account\n      2. You have received a free Code Assist license through the Google Developer Program\n      3.",
+      "frame": 2,
+      "length": 929
+    },
+    {
+      "id": 3,
+      "text": "oogle Developer Program\n      3. You have been assigned a license to a current Gemini Code Assist standard or enterprise subscription\n      4. You are using the product outside the supported regions for free individual usage\n      5. You are a Google account holder under the age of 18\n\n2.  **Gemini API key:**\n    - Obtain your API key from Google AI Studio: https://aistudio.google.com/app/apikey\n    - Set the `GEMINI_API_KEY` environment variable\n    - For repeated use, add the environment variable to your `.env` file or shell's configuration file\n\n3.  **Vertex AI:**\n    - Requires Google Cloud project setup and enabling the Vertex AI API\n    - Set up Application Default Credentials (ADC) using: `gcloud auth application-default login`\n    - Set required environment variables: GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION, and GOOGLE_GENAI_USE_VERTEXAI",
+      "frame": 3,
+      "length": 861
+    },
+    {
+      "id": 4,
+      "text": "# Gemini CLI Usage and Examples\n\n## Non-interactive mode\n\nGemini CLI can be run in a non-interactive mode, which is useful for scripting and automation. In this mode, you pipe input to the CLI, it executes the command, and then it exits.\n\nExamples:\n```bash\necho \"What is fine tuning?\" | gemini\ngemini -p \"What is fine tuning?\"\n```\n\n## Token Caching and Cost Optimization\nGemini CLI automatically optimizes API costs through token caching when using API key authentication (Gemini API key or Vertex AI). This feature reuses previous system instructions and context to reduce the number of tokens processed in subsequent requests.\n\nToken caching is available for:\n- API key users (Gemini API key)\n- Vertex AI users (with project and location setup)\n\nToken caching is not available for:\n- OAuth users (Google Personal/Enterprise accounts) - the Code Assist API does not support cached content creation at this time\n\nYou can view your token usage and cached token savings using the /stats command.",
+      "frame": 4,
+      "length": 993
+    },
+    {
+      "id": 5,
+      "text": "avings using the /stats command.\n\n## 7 Insane Tips for Superhuman Development\n\n1. **Rename Images Based on Content**: Gemini CLI can analyze image content and automatically rename files with descriptive names\n2. **Convert YouTube Tutorials into Shell Commands**: Provide a YouTube link and get extracted shell commands and instructions\n3. **Auto-Analyze and Close Spam PRs**: Integrate with GitHub CLI to identify and close low-effort pull requests\n4. **Chain Prompts with /mcp**: Create sequences of tasks for multi-step workflows\n5. **Discover Hidden Features with /tools**: Reveals built-in utilities like log analyzers and code reviewers\n6. **Natural Language Shell Mode**: Use plain English to perform terminal operations\n7. **Code Explanation and Architecture Diagrams**: Analyze codebases and generate visual architecture diagrams",
+      "frame": 5,
+      "length": 837
+    },
+    {
+      "id": 6,
+      "text": "# MCP servers with the Gemini CLI\n\n## What is an MCP server?\n\nAn MCP server is an application that exposes tools and resources to the Gemini CLI through the Model Context Protocol, allowing it to interact with external systems and data sources. MCP servers act as a bridge between the Gemini model and your local environment or other services like APIs.\n\nAn MCP server enables the Gemini CLI to:\n- **Discover tools:** List available tools, their descriptions, and parameters through standardized schema definitions\n- **Execute tools:** Call specific tools with defined arguments and receive structured responses\n- **Access resources:** Read data from specific resources\n\n## Configuration Structure\n\nAdd an `mcpServers` object to your `settings.json` file:\n\n```json\n{ \n  \"mcpServers\": {\n    \"serverName\": {\n      \"command\": \"path/to/server\",\n      \"args\": [\"--arg1\", \"value1\"],\n      \"env\": {\n        \"API_KEY\": \"$MY_API_TOKEN\"\n      },\n      \"cwd\": \".",
+      "frame": 6,
+      "length": 951
+    },
+    {
+      "id": 7,
+      "text": "_TOKEN\"\n      },\n      \"cwd\": \"./server-directory\",\n      \"timeout\": 30000,\n      \"trust\": false\n    }\n  }\n}\n```\n\n## Example Configurations\n\n### Python MCP Server (Stdio)\n```json\n{\n  \"mcpServers\": {\n    \"pythonTools\": {\n      \"command\": \"python\",\n      \"args\": [\"-m\", \"my_mcp_server\", \"--port\", \"8080\"],\n      \"cwd\": \"./mcp-servers/python\",\n      \"env\": {\n        \"DATABASE_URL\": \"$DB_CONNECTION_STRING\",\n        \"API_KEY\": \"${EXTERNAL_API_KEY}\"\n      },\n      \"timeout\": 15000\n    }\n  }\n}\n```\n\n### Docker-based MCP Server\n```json\n{\n  \"mcpServers\": {\n    \"dockerizedServer\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-e\",\n        \"API_KEY\",\n        \"-v\",\n        \"${PWD}:/workspace\",\n        \"my-mcp-server:latest\"\n      ],\n      \"env\": {\n        \"API_KEY\": \"$EXTERNAL_SERVICE_TOKEN\"\n      }\n    }\n  }\n}\n```\n\n## GitHub MCP Server Tutorial\n\n1. Create settings file: `mkdir -p .gemini && touch .gemini/settings.json`\n2.",
+      "frame": 7,
+      "length": 974
+    },
+    {
+      "id": 8,
+      "text": "touch .gemini/settings.json`\n2. Configure the server:\n```json\n{\n  \"mcpServers\": {\n    \"github\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@modelcontextprotocol/server-github\"],\n      \"env\": {\n        \"GITHUB_PERSONAL_ACCESS_TOKEN\": \"YOUR_GITHUB_PAT_HERE\"\n      }\n    }\n  }\n}\n```\n3. Generate GitHub Personal Access Token with repository permissions\n4. Verify integration with `/mcp` command\n5. Use tools via natural language: \"List the 5 most recent open issues in the google-gemini/gemini-cli repository\"",
+      "frame": 8,
+      "length": 510
+    },
+    {
+      "id": 9,
+      "text": "# Troubleshooting Guide\n\nThis guide provides solutions to common issues and debugging tips.\n\n## Authentication Issues\n\n- **Error: `Failed to login. Message: Request contains an invalid argument`**\n  - Users with Google Workspace accounts, or users with Google Cloud accounts associated with their Gmail accounts may not be able to activate the free tier of the Google Code Assist plan\n  - For Google Cloud accounts, you can work around this by setting `GOOGLE_CLOUD_PROJECT` to your project ID\n  - You can also grab an API key from AI Studio, which also includes a separate free tier\n\n## Frequently Asked Questions (FAQs)\n\n- **Q: How do I update Gemini CLI to the latest version?**\n  - A: If installed globally via npm, update using `npm install -g @google/gemini-cli@latest`. If run from source, pull the latest changes and rebuild using `npm run build`\n\n- **Q: Where are Gemini CLI configuration files stored?**\n  - A: Configuration is stored in `settings.json` files: one in your home directory (`~/.gemini/settings.",
+      "frame": 9,
+      "length": 1019
+    },
+    {
+      "id": 10,
+      "text": "directory (`~/.gemini/settings.json`) and one in your project's root directory (`.gemini/settings.json`)\n\n- **Q: Why don't I see cached token counts in my stats output?**\n  - A: Cached token information is only displayed when cached tokens are being used. This feature is available for API key users but not for OAuth users at this time\n\n## Common Error Messages and Solutions\n\n- **Error: `EADDRINUSE` (Address already in use) when starting an MCP server**\n  - **Cause:** Another process is already using the port the MCP server is trying to bind to\n  - **Solution:** Either stop the other process or configure the MCP server to use a different port\n\n- **Error: Command not found (when attempting to run Gemini CLI)**\n  - **Cause:** Gemini CLI is not correctly installed or not in your system's PATH\n  - **Solution:** Ensure installation was successful and npm global binary directory is in PATH\n\n- **Error: `MODULE_NOT_FOUND` or import errors**\n  - **Cause:** Dependencies are not installed correctly, or the project hasn'",
+      "frame": 10,
+      "length": 1023
+    },
+    {
+      "id": 11,
+      "text": "correctly, or the project hasn't been built\n  - **Solution:** Run `npm install` and `npm run build`\n\n- **Error: \"Operation not permitted\", \"Permission denied\"**\n  - **Cause:** If sandboxing is enabled, the application is attempting an operation restricted by your sandbox\n  - **Solution:** See Sandboxing documentation for customization options\n\n- **CLI is not interactive in \"CI\" environments**\n  - **Issue:** CLI does not enter interactive mode if environment variables starting with `CI_` are set\n  - **Cause:** The `is-in-ci` package detects these variables and assumes a non-interactive CI environment\n  - **Solution:** Temporarily unset the CI variable: `env -u CI_TOKEN gemini`\n\n## Debugging Tips\n\n- **CLI debugging:** Use the `--verbose` flag for more detailed output\n- **Core debugging:** Check server console output for error messages or stack traces\n- **Tool issues:** Test the simplest version of commands first\n- **Pre-flight checks:** Always run `npm run preflight` before committing code",
+      "frame": 11,
+      "length": 1002
+    },
+    {
+      "id": 12,
+      "text": "itting code",
+      "frame": 12,
+      "length": 11
+    },
+    {
+      "id": 13,
+      "text": "# The Gemini CLI Masterclass: From Terminal Assistant to Agentic Development Engine\n\n## Introduction: The Dawn of the Agentic Command Line\n\nThe Google Gemini CLI represents a fundamental evolution of the command line interface. It reframes the terminal not as a command interpreter, but as a conversational workspace. This shift moves the developer from issuing commands to stating intent, allowing an intelligent agent to reason, plan, and act on their behalf.\n\n## Four Architectural Pillars\n\n1. **The Engine:** Powered by Google's advanced large language models, primarily gemini-2.5-pro\n2. **The Context:** Massive 1 million token context window for entire codebase comprehension\n3. **The Mind:** \"Reason and Act\" (ReAct) cognitive loop for iterative problem-solving\n4. **The Framework:** Open-source project on Apache 2.0 license, built on Node.js\n\n## Installation and Configuration\n\n### System Prerequisites\n- Node.",
+      "frame": 13,
+      "length": 920
+    },
+    {
+      "id": 14,
+      "text": "### System Prerequisites\n- Node.js version 18 or higher\n- Recommended: Use Node Version Manager (NVM) for version management\n\n```bash\ncurl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash\nsource ~/.nvm/nvm.sh\nnvm install 22\nnvm use 22\n```\n\n### Installation Methods\n\n**Global Installation:**\n```bash\nnpm install -g @google/gemini-cli\n```\n\n**On-Demand Execution:**\n```bash\nnpx https://github.com/google-gemini/gemini-cli\n```\n\n### Authentication Choices\n\n| Feature | Personal Google Account (Free) | Gemini API Key (Paid) |\n|---------|-------------------------------|----------------------|\n| Cost | Free | Usage-based billing |\n| Rate Limit | 60 req/min, 1000 req/day | Higher limits with paid plan |\n| Model Access | Subject to downgrade under load | Guaranteed access |\n| Performance | Can be slow/inconsistent | Consistent and predictable |\n| Data Privacy | May be used for improvement | Not used for improvement |\n| Use Case | Exploration, learning | Professional development |\n\n## Command Lexico",
+      "frame": 14,
+      "length": 1024
+    },
+    {
+      "id": 15,
+      "text": "development |\n\n## Command Lexicon\n\n### Launch-Time Parameters\n- `--model/-m`: Specify Gemini model\n- `--prompt/-p`: Non-interactive single prompt execution\n- `--debug/-d`: Enable debug mode\n- `--yolo/-y`: Auto-accept all actions (use with caution)\n- `--checkpointing/-c`: Enable automatic file snapshots\n- `--sandbox/-s`: Enable sandbox mode\n\n### Interactive Session Commands\n- `/path <directory>`: Set project context\n- `/auth`: Re-initiate authentication\n- `/tools`: List built-in tools\n- `/mcp`: List MCP server tools\n- `/memory`: Display agent's working memory\n- `/stats`: Show session statistics\n- `/quit`: Exit session\n- `/compress`: Compress conversation history\n\n### The Agent's Toolkit\n- **ReadFile**: Read single file content\n- **WriteFile**: Create new files\n- **Edit**: Apply changes to existing files\n- **ReadManyFiles**: Read multiple files at once\n- **FindFiles**: Search files using glob patterns\n- **SearchText**: Find text patterns within files\n- **ReadFolder**: List directory contents\n- **Shell**: Execut",
+      "frame": 15,
+      "length": 1024
+    },
+    {
+      "id": 16,
+      "text": "ory contents\n- **Shell**: Execute shell commands\n- **GoogleSearch**: Perform web searches\n- **WebFetch**: Fetch content from URLs\n- **SaveMemory**: Store session information",
+      "frame": 16,
+      "length": 173
+    },
+    {
+      "id": 17,
+      "text": "# Mastering the Workflow: Creative and Practical Applications\n\n## Codebase Intelligence: From Onboarding to Refactoring\n\n### Rapid Onboarding to New Projects\n- Clone repository and launch `gemini` in the directory\n- Use prompt: \"Give me a high-level summary of this project's architecture. Focus on the main directories and their roles, and explain how they interact\"\n- Agent uses FindFiles and ReadManyFiles to analyze codebase and generate structured summary\n\n### Large-Scale, Context-Aware Refactoring\nExample prompt: \"Refactor this entire Express.js API to use native async/await syntax instead of chained .then() promises\"\n\nAgent process:\n1. Use FindFiles('**/*.js') to identify relevant files\n2. Use ReadManyFiles to load content into context\n3. Use SearchText('.then(') to locate promise chains\n4. Systematically use Edit tool to propose changes file by file\n5.",
+      "frame": 17,
+      "length": 868
+    },
+    {
+      "id": 18,
+      "text": "propose changes file by file\n5. Maintain consistent understanding across entire application\n\n**Recommendation:** Use --checkpointing flag for safe restore points\n\n### Automated Documentation Generation\nPrompt: \"Read all the Python files in the 'src' directory. For each function, generate comprehensive markdown documentation including its purpose, parameters, and return value. Combine all documentation into a single new file named DOCUMENTATION.md\"\n\n## Zero-to-Hero Application Generation\n\nExample prompt: \"Create a full-stack URL shortener application. Use Next.js for the frontend and a simple SQLite database for the backend. The application should have a single page with a text input for a long URL and should display the shortened URL after submission.\"\n\nAgent's ReAct Process:\n1. **Reasoning:** Analyze requirements and plan approach\n2. **Action 1:** Execute `npx create-next-app@latest --ts --tailwind --eslint --app --src-dir --import-alias \"@/*\"`\n3. **Action 2:** Execute `npm install sqlite3 sqlite`\n4.",
+      "frame": 18,
+      "length": 1016
+    },
+    {
+      "id": 19,
+      "text": "`npm install sqlite3 sqlite`\n4. **Action 3:** Create database initialization file `src/lib/database.js`\n5. **Action 4:** Create API endpoint `src/app/api/shorten/route.ts`\n6. **Action 5:** Modify main page component `src/app/page.tsx`\n\n## DevOps and Systems Companion\n\n### Intelligent Log Analysis\nPrompt: \"This deployment is failing. Analyze the last 200 lines of 'server.log', identify the root cause of the error, and suggest a code fix\"\n\n**Technique:** Ask Gemini to create start.sh and stop.sh scripts that redirect server output to dedicated log files\n\n### Complex Batch File Operations\nPrompt: \"Convert all the .jpeg images in this directory to the .png format, and then rename each new file to use the creation date from its EXIF metadata\"\n\nAgent orchestrates:\n- Shell commands with exiftool for metadata reading\n- imagemagick for format conversion\n- Logic for filename construction and renaming\n\n### Cloud Deployment Configuration\nPrompt: \"Create the necessary YAML files to deploy this Node.",
+      "frame": 19,
+      "length": 1001
+    },
+    {
+      "id": 20,
+      "text": "YAML files to deploy this Node.js application to Google Cloud Run using a continuous integration pipeline with Cloud Build\"\n\nAgent generates:\n- cloudbuild.yaml for build steps\n- service.yaml for Cloud Run deployment configuration\n\n## Multimodal Magic: From Sketch to Code\n\n### The Sketch-to-Code Workflow\n1. Draw wireframe on paper/tablet\n2. Take picture (e.g., my_sketch.png)\n3. Use @ symbol to attach image: \"@my_sketch.png\"\n4. Prompt: \"Here is a sketch of a web page I drew: @my_sketch.png. Generate the HTML and CSS code required to build this page. Please use Bootstrap for the styling and layout\"\n\nThe model analyzes visual elements, identifies spatial relationships, and translates to structured HTML/CSS.\n\n## Visualizing Complexity with Mermaid.js\n\nPrompt: \"Analyze the file structure and primary dependencies in this React project and generate a Mermaid.js 'graph TD' (top-down) diagram that shows the high-level architecture\"\n\nAgent process:\n1. Explore directory structure (ReadFolder)\n2.",
+      "frame": 20,
+      "length": 998
+    },
+    {
+      "id": 21,
+      "text": "ectory structure (ReadFolder)\n2. Examine key files like package.json (ReadFile, SearchText)\n3. Reason about relationships between components\n4. Output Mermaid syntax for visualization\n\nExample output:\n```\ngraph TD;\n    A[User] --> B(React Frontend);\n    B --> C{API Layer};\n    C --> D[Database];\n```",
+      "frame": 21,
+      "length": 300
+    },
+    {
+      "id": 22,
+      "text": "# Advanced Customization and Extensibility\n\n## The GEMINI.md Masterclass\n\nThe GEMINI.md file is the primary mechanism for providing persistent, project-specific instructions to the agent. It acts as a set of standing orders or a \"system prompt\" that tailors the generic Gemini model into a specialist for a particular codebase.\n\n### Context Hierarchy\nThe agent searches for GEMINI.md files in this order:\n1. **Local Context:** Current working directory (highly specific instructions)\n2. **Project Context:** Parent directories up to root (project-wide rules)\n3. **Global Context:** ~/.gemini/ directory (universal preferences)\n\nMore specific instructions take precedence over general ones.\n\n### Crafting Effective GEMINI.md Instructions\n\n**Best Practices:**\n- Use clear headings and markdown structure\n- Be explicit and direct with imperative language\n- Define coding conventions explicitly\n- Specify technology choices and constraints\n- Outline architectural patterns\n\n### Example GEMINI.md for Next.",
+      "frame": 22,
+      "length": 1001
+    },
+    {
+      "id": 23,
+      "text": "### Example GEMINI.md for Next.js Project\n\n```markdown\n# Project Guidelines for My-Next-App\n\nYou are an expert-level software engineer specializing in Next.js and TypeScript. Your primary goal is to generate clean, maintainable, and performant code that adheres strictly to the following project standards.\n\n## Core Mandates & Technology Stack\n- **Language:** All code must be written in TypeScript. JavaScript is not permitted.\n- **Styling:** All styling must be implemented using Tailwind CSS utility classes. Do not write plain CSS, CSS Modules, or use CSS-in-JS libraries.\n- **State Management:** Global client-side state must be managed with Zustand. Do not use Redux, MobX, or React Context API.\n- **Component Model:** Adhere to React Server Components (RSC) model. Components should be server components by default.\n\n## Architectural Rules\n- **API Routes:** All backend API endpoints must be implemented as Route Handlers in src/app/api/\n- **Component Structure:** Reusable UI components in src/components/.",
+      "frame": 23,
+      "length": 1014
+    },
+    {
+      "id": 24,
+      "text": "I components in src/components/. Page-specific components alongside their page.tsx file.\n- **Data Fetching:** All server data fetching should be done directly within Server Components using async/await.\n\n## Testing and Quality\n- **Testing Framework:** All unit and integration tests must be written using Vitest and React Testing Library.\n- **Test Generation:** When generating a new component, also generate a corresponding test file with basic render test.\n```\n\n## Extending Capabilities with MCP\n\nThe Model Context Protocol (MCP) extends the agent's capabilities by adding new, custom tools. MCP works by running servers that expose functions which the Gemini CLI can discover and call.\n\n### GitHub MCP Server Tutorial\n\n**Step 1: Create Settings File**\n```bash\nmkdir -p .gemini && touch .gemini/settings.json\n```\n\n**Step 2: Configure the Server**\n```json\n{\n  \"mcpServers\": {\n    \"github\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@modelcontextprotocol/server-github\"],\n      \"env\": {\n        \"GITHUB_PERSONAL_ACCES",
+      "frame": 24,
+      "length": 1024
+    },
+    {
+      "id": 25,
+      "text": "{\n        \"GITHUB_PERSONAL_ACCESS_TOKEN\": \"YOUR_GITHUB_PAT_HERE\"\n      }\n    }\n  }\n}\n```\n\n**Step 3: Generate and Secure Token**\n- Generate Personal Access Token from GitHub Developer settings\n- Needs permissions to read repository data and issues\n- Treat as secret - don't commit to version control\n\n**Step 4: Verify Integration**\n- Restart gemini CLI session\n- Run `/mcp` command to list new tools\n- Tools like github.getIssue and github.listRepositories should appear\n\n**Step 5: Use New Tools**\nPrompt: \"List the 5 most recent open issues in the google-gemini/gemini-cli repository\"\n\n### Custom MCP Server Ideas\n\nDevelopment teams could create MCP servers to:\n- Interact with internal Jira instance\n- Query proprietary company databases\n- Trigger builds in Jenkins or CircleCI\n- Connect to specialized AI models (Imagen for images, Veo for video)\n- Integrate with internal APIs and services",
+      "frame": 25,
+      "length": 892
+    },
+    {
+      "id": 26,
+      "text": "# Developer's Guide to Building Gemini CLI Wrappers and Automation\n\n## Automation Strategies\n\n### Non-Interactive Scripting with --prompt\n\nThe --prompt (or -p) flag allows CLI to be called from shell scripts for single task execution.\n\n**Example: Git Pre-commit Hook**\n```bash\n#!/bin/sh\n# .git/hooks/pre-commit\n\nSTAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)\n\nif [ -z \"$STAGED_FILES\" ]; then\n  exit 0\nfi\n\necho \"Performing AI pre-commit check...\"\n\nREVIEW=$(gemini -p \"Review the following staged files for any obvious bugs or style violations based on our project's GEMINI.md file: $STAGED_FILES. If there are critical issues, respond with 'FAIL:'. Otherwise, respond with 'PASS.'.\")\n\necho \"$REVIEW\"\n\nif echo \"$REVIEW\" | grep -q \"FAIL:\"; then\n  echo \"AI check failed. Please review the issues before committing.\"\n  exit 1\nfi\n\nexit 0\n```\n\n### CI/CD Integration with gemini-cli-action\n\nGoogle provides an official GitHub Action: gemini-cli-action for CI/CD integration.",
+      "frame": 26,
+      "length": 983
+    },
+    {
+      "id": 27,
+      "text": "li-action for CI/CD integration.\n\n**Key Features:**\n- Triggered by GitHub events (issues, PR comments)\n- Automatic issue triage with label application\n- Customizable with GEMINI.md files\n\n**Example Workflow: Automated Issue Triage**\n```yaml\n# .github/workflows/triage.yml\nname: 'Gemini Issue Triage'\n\non:\n  issues:\n    types: [opened, reopened]\n\npermissions:\n  issues: write\n  contents: read\n\njobs:\n  triage_issue:\n    runs-on: ubuntu-latest\n    steps:\n      - name: 'Triage issue with Gemini'\n        uses: google-gemini/gemini-cli-action@main\n        with:\n          github_token: ${{ secrets.GITHUB_TOKEN }}\n          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}\n          prompt: >\n            Analyze the title and body of the issue and apply one of the following labels:\n            'bug', 'feature-request', 'documentation', or 'question'.\n            Provide a brief justification for your choice in a comment.",
+      "frame": 27,
+      "length": 919
+    },
+    {
+      "id": 28,
+      "text": "on for your choice in a comment.\n```\n\n**Setup Requirements:**\n- Configure GITHUB_TOKEN (usually available automatically)\n- Configure GEMINI_API_KEY secret in repository settings\n- Requires issues: write and contents: read permissions\n\n## The Output Parsing Challenge and Structured Solution\n\n**Problem:** Parsing human-readable CLI output is brittle and unreliable. Interactive output is conversational and formatted for humans, not machines.\n\n**Solution:** Use the Gemini API directly with Structured Output for programmatic interaction.\n\n### Recommendation: Using Gemini API for Reliable JSON\n\nFor building tools, wrappers, or automation, use the API's response_schema feature for stable, predictable contracts.\n\n**Example Python Wrapper Function:**\n```python\nimport google.generativeai as genai\nfrom pydantic import BaseModel, Field\nimport os\nfrom typing import List, Optional\n\n# Configure API key\ngenai.configure(api_key=os.",
+      "frame": 28,
+      "length": 928
+    },
+    {
+      "id": 29,
+      "text": "key\ngenai.configure(api_key=os.environ[\"GEMINI_API_KEY\"])\n\n# Define desired JSON structure\nclass CodeReview(BaseModel):\n    \"\"\"A structured review of a code snippet.\"\"\"\n    is_clean: bool = Field(description=\"True if code follows best practices\")\n    suggestions: List[str] = Field(description=\"Actionable improvement suggestions\")\n    refactored_code: Optional[str] = Field(description=\"Fully refactored code if needed\")\n    overall_score: int = Field(description=\"Quality score from 1-10\")\n\ndef get_structured_code_review(code_snippet: str) -> Optional[CodeReview]:\n    \"\"\"\n    Sends code to Gemini API and requests structured JSON review.\n    This is the reliable, production-ready approach.\n    \"\"\"\n    prompt = f\"\"\"\n    Please act as an expert Python code reviewer.\n    Analyze the following code snippet for quality, correctness, and PEP 8 adherence.\n    \n    Code to review:\n    ```python\n    {code_snippet}\n    ```\n    \"\"\"\n    \n    try:\n        model = genai.GenerativeModel(model_name=\"gemini-2.",
+      "frame": 29,
+      "length": 1004
+    },
+    {
+      "id": 30,
+      "text": "ativeModel(model_name=\"gemini-2.5-pro\")\n        response = model.generate_content(\n            prompt,\n            generation_config=genai.GenerationConfig(\n                response_mime_type=\"application/json\",\n                response_schema=CodeReview,\n            )\n        )\n        return response.parsed\n    except Exception as e:\n        print(f\"API error: {e}\")\n        return None\n\n# Example usage\nif __name__ == \"__main__\":\n    bad_code = \"def myfunc( a,b ):\\n return a+b\"\n    review = get_structured_code_review(bad_code)\n    \n    if review:\n        print(f\"Is Clean: {review.is_clean}\")\n        print(f\"Score: {review.overall_score}/10\")\n        for suggestion in review.suggestions:\n            print(f\"  - {suggestion}\")\n```\n\nThis pattern provides robust, maintainable automation immune to changes in CLI conversational output.",
+      "frame": 30,
+      "length": 842
+    }
+  ],
+  "chunk_to_frame": {
+    "0": 0,
+    "1": 1,
+    "2": 2,
+    "3": 3,
+    "4": 4,
+    "5": 5,
+    "6": 6,
+    "7": 7,
+    "8": 8,
+    "9": 9,
+    "10": 10,
+    "11": 11,
+    "12": 12,
+    "13": 13,
+    "14": 14,
+    "15": 15,
+    "16": 16,
+    "17": 17,
+    "18": 18,
+    "19": 19,
+    "20": 20,
+    "21": 21,
+    "22": 22,
+    "23": 23,
+    "24": 24,
+    "25": 25,
+    "26": 26,
+    "27": 27,
+    "28": 28,
+    "29": 29,
+    "30": 30
+  },
+  "frame_to_chunks": {
+    "0": [
+      0
+    ],
+    "1": [
+      1
+    ],
+    "2": [
+      2
+    ],
+    "3": [
+      3
+    ],
+    "4": [
+      4
+    ],
+    "5": [
+      5
+    ],
+    "6": [
+      6
+    ],
+    "7": [
+      7
+    ],
+    "8": [
+      8
+    ],
+    "9": [
+      9
+    ],
+    "10": [
+      10
+    ],
+    "11": [
+      11
+    ],
+    "12": [
+      12
+    ],
+    "13": [
+      13
+    ],
+    "14": [
+      14
+    ],
+    "15": [
+      15
+    ],
+    "16": [
+      16
+    ],
+    "17": [
+      17
+    ],
+    "18": [
+      18
+    ],
+    "19": [
+      19
+    ],
+    "20": [
+      20
+    ],
+    "21": [
+      21
+    ],
+    "22": [
+      22
+    ],
+    "23": [
+      23
+    ],
+    "24": [
+      24
+    ],
+    "25": [
+      25
+    ],
+    "26": [
+      26
+    ],
+    "27": [
+      27
+    ],
+    "28": [
+      28
+    ],
+    "29": [
+      29
+    ],
+    "30": [
+      30
+    ]
+  },
+  "config": {
+    "qr": {
+      "version": 35,
+      "error_correction": "M",
+      "box_size": 5,
+      "border": 3,
+      "fill_color": "black",
+      "back_color": "white"
+    },
+    "codec": "h265",
+    "chunking": {
+      "chunk_size": 1024,
+      "overlap": 32
+    },
+    "retrieval": {
+      "top_k": 5,
+      "batch_size": 100,
+      "max_workers": 4,
+      "cache_size": 1000
+    },
+    "embedding": {
+      "model": "all-MiniLM-L6-v2",
+      "dimension": 384
+    },
+    "index": {
+      "type": "Flat",
+      "nlist": 100
+    },
+    "llm": {
+      "model": "gemini-2.0-flash-exp",
+      "max_tokens": 8192,
+      "temperature": 0.1,
+      "context_window": 32000
+    },
+    "chat": {
+      "max_history": 10,
+      "context_chunks": 5
+    },
+    "performance": {
+      "prefetch_frames": 50,
+      "decode_timeout": 10
+    }
+  }
+}
