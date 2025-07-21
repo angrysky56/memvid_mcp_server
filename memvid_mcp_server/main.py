@@ -131,10 +131,10 @@ class ServerState:
             # Get the directory containing this script
             script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             library_dir = os.path.join(script_dir, "library")
-            
+
             # Create library directory if it doesn't exist
             os.makedirs(library_dir, exist_ok=True)
-            
+
             logger.info(f"Using library directory: {library_dir}")
             return library_dir
         except Exception as e:
@@ -297,7 +297,7 @@ async def _rebuild_memory_from_json(video_path: str, index_path: str) -> bool:
         # Resolve paths (in case relative paths were passed)
         resolved_video_path = _server_state.resolve_file_path(video_path, "video")
         resolved_index_path = _server_state.resolve_file_path(index_path, "index")
-        
+
         logger.info(f"Attempting to rebuild memory from {resolved_index_path}")
 
         # Read the JSON metadata
@@ -612,7 +612,7 @@ async def chat_with_memvid(ctx: Context, message: str) -> dict[str, Any]:
         return {"status": "error", "message": str(e)}
 
 @mcp.tool()
-async def list_video_memories(ctx: Context, directory: str = None) -> dict[str, Any]:
+async def list_video_memories(ctx: Context, directory: Optional[str] = None) -> dict[str, Any]:
     """List available video memory files in a directory.
 
     Searches for .mp4/.json pairs that represent complete video memories.
@@ -628,7 +628,7 @@ async def list_video_memories(ctx: Context, directory: str = None) -> dict[str, 
         # Use library directory as default
         if directory is None:
             directory = _server_state.library_dir
-        
+
         # Find all .mp4 files in directory
         mp4_pattern = os.path.join(directory, "*.mp4")
         mp4_files = glob.glob(mp4_pattern)
@@ -700,7 +700,7 @@ async def load_video_memory(ctx: Context, video_path: str, index_path: str) -> d
         # Resolve paths using library directory for relative paths
         resolved_video_path = _server_state.resolve_file_path(video_path, "video")
         resolved_index_path = _server_state.resolve_file_path(index_path, "index")
-        
+
         # Verify files exist
         if not os.path.exists(resolved_video_path):
             return {"status": "error", "message": f"Video file not found: {resolved_video_path}"}
